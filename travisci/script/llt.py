@@ -1,6 +1,3 @@
-'''preinstall or install stage script'''
-
-# -*- coding: UTF-8 -*-
 #
 #   =======================================================================
 #
@@ -33,35 +30,4 @@
 # POSSIBILITY OF SUCH DAMAGE.
 #   =======================================================================
 #
-
-import os
-import sys
-
-sys.path.append(os.path.join(os.path.dirname(
-    os.path.realpath(__file__)), ".."))
-
-from commands import InstallationCommands
-import comm.util as util
-
-
-def main():
-    '''handle install commands'''
-    command_file_name = None
-    if len(os.sys.argv) >= 2:
-        command_file_name = os.sys.argv[1]
-
-    install_commands = InstallationCommands(command_file_name)
-    ret, commands = install_commands.get_install_commands()
-
-    if not ret:
-        exit(-1)
-
-    for command in commands:
-        ret = util.execute(command, print_output_flag=True)
-        if not ret[0]:
-            exit(-1)
-    exit(0)
-
-
-if __name__ == "__main__":
-    main()
+'''llt'''
