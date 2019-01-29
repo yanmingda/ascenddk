@@ -1,5 +1,4 @@
 TOPDIR      := $(patsubst %,%,$(CURDIR))
-DDK_HOME := /home/mindusr/tools/che/ddk/ddk
 CC := aarch64-linux-gnu-g++
 CPP := aarch64-linux-gnu-g++
 

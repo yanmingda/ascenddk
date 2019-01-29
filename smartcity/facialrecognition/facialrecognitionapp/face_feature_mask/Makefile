@@ -1,6 +1,5 @@
 all : libface_feature_mask.so
 #DEVICE COMPILER		
-DDK_HOME = /home/mindusr/tools/che/ddk/ddk
 CC := aarch64-linux-gnu-g++
 # current directory
 LOCAL_DIR  := ./

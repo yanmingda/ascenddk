@@ -1,6 +1,5 @@
 all : libface_register.so
 #DEVICE COMPILER		
-DDK_HOME = /home/mindusr/tools/che/ddk/ddk
 CC := aarch64-linux-gnu-g++
 #注意每行后面不要有空格，否则会算到目录名里面，导致问题
 LOCAL_DIR  := ./
