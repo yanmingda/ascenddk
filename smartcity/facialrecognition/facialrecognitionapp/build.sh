@@ -1,5 +1,5 @@
 #!/bin/sh
-export LD_LIBRARY_PATH=/home/mindusr/tools/che/ddk/ddk/uihost/lib/
+export LD_LIBRARY_PATH=$DDK_HOME/uihost/lib/
 TOP_DIR=${PWD}
 cd ${TOP_DIR} && make
 cp graph.config ./out/
