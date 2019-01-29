@@ -46,8 +46,7 @@ import tornado.web
 import tornado.gen
 import tornado.websocket
 import face_detection.src.config_parser as config_parser
-import common.channel_manager as channel_manager
-
+from common.channel_manager import ChannelManager
 
 class WebApp:
     """
@@ -58,13 +57,11 @@ class WebApp:
         """
         init method
         """
-        self.channel_mgr = channel_manager.ChannelManager()
+        self.channel_mgr = ChannelManager(["image", "video"])
 
         self.request_list = set()
 
         self.lock = threading.Lock()
-
-
 
     def __new__(cls, *args, **kwargs):
 
@@ -72,9 +69,6 @@ class WebApp:
         if cls.__instance is None:
             cls.__instance = object.__new__(cls, *args, **kwargs)
         return cls.__instance
-
-
-
 
     def add_channel(self, channel_name):
         """
@@ -136,7 +130,6 @@ class WebApp:
             ret["ret"] = "success"
 
         return ret
-
 
     def del_channel(self, names):
         """
@@ -282,10 +275,6 @@ class WebApp:
         else:
             return {'type': 'unkown', 'image':None, 'fps':0, 'status':'loading'}
 
-
-G_WEBAPP = WebApp()
-
-
 # pylint: disable=abstract-method
 class BaseHandler(tornado.web.RequestHandler):
     """
@@ -393,7 +382,6 @@ class WebSocket(tornado.websocket.WebSocketHandler):
         called when closed web socket
         """
 
-
     @tornado.web.asynchronous
     @tornado.gen.coroutine
     def on_message(self, message):
@@ -470,7 +458,7 @@ def start_webapp():
     http_server.listen(config.web_server_port, address=config.web_server_ip)
 
     print("Please visit http://" + config.web_server_ip + ":" +
-          str(config.web_server_port) + " for presenter server")
+          str(config.web_server_port) + " for face detection")
     tornado.ioloop.IOLoop.instance().start()
 
 
@@ -479,3 +467,6 @@ def stop_webapp():
     stop web app
     """
     tornado.ioloop.IOLoop.instance().stop()
+
+global G_WEBAPP
+G_WEBAPP = WebApp()

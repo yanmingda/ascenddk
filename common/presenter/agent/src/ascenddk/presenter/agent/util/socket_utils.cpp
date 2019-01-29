@@ -145,7 +145,7 @@ int Connect(int socket, const sockaddr_in& addr) {
   int ret = ::connect(socket, (sockaddr*) &addr, sizeof(addr));
   if (ret < 0) {
     if (errno != EINPROGRESS) {
-
+      AGENT_LOG_ERROR("connect() error: %s", strerror(errno));
       return kSocketError;
     }
 
@@ -186,6 +186,11 @@ int ReadN(int socket, char *buffer, int size) {
     char *write_ptr = buffer + received_cnt;
     int ret = ::recv(socket, write_ptr, size - received_cnt, kSocketFlagNone);  // [false alarm]: will never write over size
     if (ret == kSocketError) {
+      if (errno == EAGAIN || errno == EINTR) {
+        AGENT_LOG_INFO("recv() timeout. error = %s", strerror(errno));
+        return kSocketTimeout;
+      }
+
       AGENT_LOG_ERROR("recv() error. error = %s", strerror(errno));
       return kSocketError;
     }
