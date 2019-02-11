@@ -7,7 +7,6 @@ env:
     BUILD_TEMP_PATH=${BUILD_ROOT_PATH}/temp
     DDK_HOME=${ASCEND_ROOT_PATH}/tools/ddk
     LLT_ROOT_PATH=${ASCEND_ROOT_PATH}/llt
-    ASCEND_DEFAULT_COMPILER=aarch64-linux-gnu-g++
 
 #default before_install, clone Ascend/tools as default, it can be overwrited by jobs
 before_install: python3 ${BUILD_ROOT_PATH}/install/install.py clone_tools
