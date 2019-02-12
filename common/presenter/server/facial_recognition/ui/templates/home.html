@@ -156,8 +156,6 @@
                 </div>
             </div>
         </div>
-        
-        
     </div>
 </body>
 <script src="/static/js/jquery-1.10.2.min.js"></script>
@@ -168,6 +166,7 @@
     var log=console.log.bind(console)
     var retCodeSuccess="0"
     var retCodeFail="1"
+    var ws,app_name,req
 </script>
 <script>
     var canvas=document.getElementById("canvas")
@@ -175,8 +174,10 @@
     $('#fpswapper').hide()
     $('#loading').hide()
     function startViewVideo(app_name,req){
-        $('#channel_name_val').text(app_name)
-        $('#fpswapper').show()
+        if(ws != undefined){
+            ws.close()
+            console.log("websocket exist & close")
+        }
         console.log("View Video started")
         var img=new Image()
         var wsProtocol="ws://"
@@ -185,7 +186,11 @@
         }
         var wsUrl = wsProtocol + window.location.host + "/websocket?req="+req+"&app_name="+app_name;
 
-        var ws=new WebSocket(wsUrl);
+        //save current video stream in sessionStorage
+        sessionStorage.setItem("currentAppName", app_name)
+        sessionStorage.setItem("currentReq",req)
+
+        ws=new WebSocket(wsUrl);
         var onmessageflag = false;
         console.log("build websocket success")
 
@@ -196,6 +201,8 @@
         ws.onmessage = function(evt){
             console.log("ws is onmessage")
             $('#loading').hide()
+            $('#channel_name_val').text(app_name)
+            $('#fpswapper').show()
             // ctx.clearRect(0,0,canvas.width,canvas.height)
             var data = JSON.parse(evt.data)
             if(data["ret"] == retCodeSuccess){
@@ -203,7 +210,7 @@
                 var src="data:image/jpeg;base64,"+data["image"];
                 //face detect
                 var img=new Image()
-				img.src=src
+                img.src=src
                 img.onload=function(){
                     canvas.setAttribute("width",img.width)
                     canvas.setAttribute("height",img.height)
@@ -457,10 +464,11 @@
         reader.readAsArrayBuffer(file)
         var jpghead=[255,216]
         var pnghead=[137,80,78,71]
+        var bmphead=[66,67]
         reader.onload = function(evt){
             var ImgArrayBuffer=evt.target.result
             var buffer=new Uint8Array(ImgArrayBuffer)
-            if(BinaryCheck(buffer,jpghead)==false && BinaryCheck(buffer,pnghead) == false){
+            if(BinaryCheck(buffer,jpghead)==false && BinaryCheck(buffer,pnghead) == false && BinaryCheck(buffer,bmphead) == false){
                 $("#input").val("")
                 log("Check image head invalid")
                 dialog.tip("Tips","Check image head invalid",function(){})
@@ -630,6 +638,12 @@
                     }
                 });
 
+            },function(){
+                for(var i=0;i<now_fensi.length;i++){
+                    if($('#carda'+i+"").is("：checked")){
+                        $('#carda'+i+"").click()
+                    }
+                }
             });
         }else{
             log("No image selected !")
@@ -667,7 +681,12 @@
                     }
                 }
             });
-
+        },function(){
+            for(var i=0;i<now_fensi.length;i++){
+                if($('#carda'+i+"").is("：checked")){
+                    $('#carda'+i+"").click()
+                }
+            }
         });
     })
     $('#btn-jump').click(function(){
@@ -715,9 +734,26 @@
             log(location.hash)
         });
         log("h2")
+        var anchor = location.hash || $("a[data-toggle=tab]").first().attr("href");
+        if(anchor == "#home" && ws == undefined){
+            var currentAppName = sessionStorage.getItem("currentAppName")
+            var currentReq = sessionStorage.getItem("currentReq")
+
+            if(currentAppName != null && currentReq != null){
+                startViewVideo(currentAppName,currentReq);
+            }
+        }
     });
     $(window).on('popstate', function() {
         var anchor = location.hash || $("a[data-toggle=tab]").first().attr("href");
+        if(anchor == "#home" && ws == undefined){
+            var currentAppName = sessionStorage.getItem("currentAppName")
+            var currentReq = sessionStorage.getItem("currentReq")
+
+            if(currentAppName != null && currentReq != null){
+                startViewVideo(currentAppName,currentReq);
+            }
+        }
         $('a[href=' + anchor + ']').tab('show');
     });
 </script>
