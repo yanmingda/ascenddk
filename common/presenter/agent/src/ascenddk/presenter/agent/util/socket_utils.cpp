@@ -49,6 +49,9 @@ namespace {
 
 // no flag is need for now
 const int kSocketFlagNone = 0;
+  
+// socket closed
+const int kSocketClosed = 0;
 
 // connect timeout
 const int kDefaultTimeoutInSec = 3;
@@ -194,6 +197,11 @@ int ReadN(int socket, char *buffer, int size) {
       AGENT_LOG_ERROR("recv() error. error = %s", strerror(errno));
       return kSocketError;
     }
+    
+    if (ret == kSocketClosed) {
+      AGENT_LOG_ERROR("socket closed");
+      return kSocketError;
+    }
 
     received_cnt += ret;
   }
@@ -209,6 +217,11 @@ int WriteN(int socket, const char *data, int size) {
     int ret = ::send(socket, read_ptr, size - sent_cnt, kSocketFlagNone);
     if (ret == kSocketError) {
       AGENT_LOG_ERROR("send() error. errno = %s", strerror(errno));
+      return kSocketError;
+    }
+    
+    if (ret == kSocketClosed) {
+      AGENT_LOG_ERROR("socket closed");
       return kSocketError;
     }
 
