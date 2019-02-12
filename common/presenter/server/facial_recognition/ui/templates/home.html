@@ -448,7 +448,7 @@
                 return;
             }
             log(file.type)
-            if (/^image\/(jpeg|png)$/.test(file.type)) {
+            if (/^image\/(jpeg|png|bmp)$/.test(file.type)) {
                 ImageHeaderCheck(file)
             } else {
                 log("Invalid Image suffix. Only suypport jpg/png image")
@@ -464,7 +464,7 @@
         reader.readAsArrayBuffer(file)
         var jpghead=[255,216]
         var pnghead=[137,80,78,71]
-        var bmphead=[66,67]
+        var bmphead=[66,77]
         reader.onload = function(evt){
             var ImgArrayBuffer=evt.target.result
             var buffer=new Uint8Array(ImgArrayBuffer)
