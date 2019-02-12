@@ -56,7 +56,7 @@ def arg_parse():
                         choices=['face_detection',
                                  'facial_recognition',
                                  'video_analysis'],
-                        help="Presenter Server startup type")
+                        help="Application type corresponding to Presenter Server.")
     args = parser.parse_args()
     SERVER_TYPE = args.app
     if args.app == "face_detection":
