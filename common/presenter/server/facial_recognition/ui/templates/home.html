@@ -744,6 +744,17 @@
             log(location.hash)
         });
         log("h2")
+      /*
+        var anchor = location.hash || $("a[data-toggle=tab]").first().attr("href");
+        if(anchor == "#home" && ws == undefined){
+            var currentAppName = sessionStorage.getItem("currentAppName")
+            var currentReq = sessionStorage.getItem("currentReq")
+
+            if(currentAppName != null && currentReq != null){
+                startViewVideo(currentAppName,currentReq);
+            }
+        }
+        */
     });
     $(window).on('popstate', function() {
         var anchor = location.hash || $("a[data-toggle=tab]").first().attr("href");

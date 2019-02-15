@@ -267,6 +267,8 @@ bool FaceRegister::DoRegisterProcess() {
         HIAI_ENGINE_LOG(HIAI_ENGINE_RUN_ARGS_NOT_RIGHT,
                         "[FaceRegister] SendData failed.");
       }
+    } else {
+      usleep (kSleepInterval);
     }
   }
 }
