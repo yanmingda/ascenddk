@@ -107,7 +107,7 @@ const string kTimeoutStr = "stimeout"; // timeout string
 
 const string kTimeoutValue = "1000000"; // timeout value
 
-const string kThreadNameHead = "handle_" // thread name head string
+const string kThreadNameHead = "handle_"; // thread name head string
 
 const int kErrorBufferSize = 1024; // buffer size for error info
 
@@ -431,7 +431,7 @@ int VideoDecode::GetIntChannelId(const string channel_id) {
   }
 }
 
-const string &VideoDecode::GetStrChannelValue(const string &channel_id) {
+const string &VideoDecode::GetChannelValue(const string &channel_id) {
   if (channel_id == kStrChannelId1) { // check channel is channel1
     return channel1_;
   } else { // the channel is channel2
@@ -552,7 +552,7 @@ void VideoDecode::UnpackVideo2Image(const string &channel_id) {
   HIAI_ENGINE_LOG("Unpack video to image from:%s, thread name:%s", 
                    channel_id.c_str(), thread_name_log);
   			   
-  string channel_value = GetChannelVaule(channel_id);
+  string channel_value = GetChannelValue(channel_id);
   AVFormatContext* av_format_context = avformat_alloc_context();
 
   // check open video result
