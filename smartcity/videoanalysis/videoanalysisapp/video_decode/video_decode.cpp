@@ -38,6 +38,7 @@
 #include <stdlib.h>
 #include <malloc.h>
 #include <unistd.h>
+#include <sys/prctl.h>
 
 #include <fstream>
 #include <memory>
@@ -106,6 +107,12 @@ const string kTimeoutStr = "stimeout"; // timeout string
 
 const string kTimeoutValue = "1000000"; // timeout value
 
+const string kThreadNameHead = "handle_"; // thread name head string
+
+const int kErrorBufferSize = 1024; // buffer size for error info
+
+const int kThreadNameLength = 32; // thread name string length
+
 const string kRegexSpace = "^[ ]*$"; // regex for check string is empty
 
 // regex for verify .mp4 file name
@@ -170,7 +177,7 @@ void VideoDecode::SendFinishedData() {
                         static_pointer_cast<void>(video_image_para));
     if (hiai_ret == HIAI_QUEUE_FULL) { // check hiai queue is full
       HIAI_ENGINE_LOG("Queue full when send finished data, sleep 10ms");
-      usleep(kWait10Milliseconds);  // sleep 10 ms
+      usleep(kWait10Milliseconds);  // sleep 10 
     }
   } while (hiai_ret == HIAI_QUEUE_FULL); // loop when hiai queue is full
 
@@ -338,7 +345,7 @@ void CallVpcGetYuvImage(FRAME* frame, void* hiai_data) {
   vpc_in_msg.rdma.chroma_head_stride = frame->stride_head;
   vpc_in_msg.rdma.luma_payload_stride = frame->stride_payload;
   vpc_in_msg.rdma.chroma_payload_stride = frame->stride_payload;
-  vpc_in_msg.cvdr_or_rdma = 0;  // cvdr:1; rdma:0
+  vpc_in_msg.cvdr_or_rdma = 0;   // cvdr:1; rdma:0
 
   vpc_in_msg.hmax = frame->realWidth - 1;  // The max deviation from the origin
   vpc_in_msg.hmin = 0; // The min deviation from 0
@@ -416,19 +423,19 @@ void VideoDecode::InitVideoStreamFilter(
   }
 }
 
-int VideoDecode::GetIntChannelId(const string channel_value) {
-  if (channel_value == channel1_) { // check channel is channel1
+int VideoDecode::GetIntChannelId(const string channel_id) {
+  if (channel_id == kStrChannelId1) { // check channel is channel1
     return kIntChannelId1;
   } else { // the channel is channel2
     return kIntChannelId2;
   }
 }
 
-const string &VideoDecode::GetStrChannelId(const string &channel_value) {
-  if (channel_value == channel1_) { // check channel is channel1
-    return kStrChannelId1;
+const string &VideoDecode::GetChannelValue(const string &channel_id) {
+  if (channel_id == kStrChannelId1) { // check channel is channel1
+    return channel1_;
   } else { // the channel is channel2
-    return kStrChannelId2;
+    return channel2_;
   }
 }
 
@@ -450,6 +457,7 @@ void VideoDecode::FfmpegPostProcess(AVPacket &av_packet,
 void VideoDecode::SetDictForRtsp(const string& channel_value,
                                  AVDictionary* &avdic) {
   if (IsValidRtsp(channel_value)) { // check channel value is valid rtsp address
+    HIAI_ENGINE_LOG("Set parameters for %s", channel_value.c_str());
     avformat_network_init();
 
     av_dict_set(&avdic, kRtspTransport.c_str(), kUdp.c_str(), kNoFlag);
@@ -469,9 +477,12 @@ bool VideoDecode::OpenVideoFromInputChannel(
                                                  &avdic);
 
   if (ret_open_input_video < kHandleSuccessful) { // check open video result
-    HIAI_ENGINE_LOG("Could not open input file:%s, "
-                    "result of avformat_open_input:%d",
-                    channel_value.c_str(), ret_open_input_video);
+    char buf_error[kErrorBufferSize];
+	av_strerror(ret_open_input_video, buf_error, kErrorBufferSize);
+	
+    HIAI_ENGINE_LOG(HIAI_ENGINE_RUN_ARGS_NOT_RIGHT, "Could not open video:%s, "
+                    "result of avformat_open_input:%d, error info:%s",
+                    channel_value.c_str(), ret_open_input_video, buf_error);
 
     if (avdic != nullptr) { // free AVDictionary
       av_dict_free(&avdic);
@@ -492,6 +503,8 @@ bool VideoDecode::InitVideoParams(int videoindex, VideoType &video_type,
                                   AVBSFContext* &bsf_ctx) {
   // check video type, only support h264 and h265
   if (!CheckVideoType(videoindex, av_format_context, video_type)) {
+	avformat_close_input(&av_format_context);
+	
     return false;
   }
 
@@ -531,7 +544,15 @@ bool VideoDecode::InitVideoParams(int videoindex, VideoType &video_type,
   return true;
 }
 
-void VideoDecode::UnpackVideo2Image(const string &channel_value) {
+void VideoDecode::UnpackVideo2Image(const string &channel_id) {
+  char thread_name_log[kThreadNameLength];
+  string thread_name = kThreadNameHead + channel_id;
+  prctl(PR_SET_NAME, (unsigned long)thread_name.c_str());
+  prctl(PR_GET_NAME, (unsigned long)thread_name_log);
+  HIAI_ENGINE_LOG("Unpack video to image from:%s, thread name:%s", 
+                   channel_id.c_str(), thread_name_log);
+  			   
+  string channel_value = GetChannelValue(channel_id);
   AVFormatContext* av_format_context = avformat_alloc_context();
 
   // check open video result
@@ -567,9 +588,9 @@ void VideoDecode::UnpackVideo2Image(const string &channel_value) {
 
   YuvImageFrameInfo yuv_image_frame_info;
   yuv_image_frame_info.channel_name = channel_value;
-  yuv_image_frame_info.channel_id = GetStrChannelId(channel_value);
+  yuv_image_frame_info.channel_id = channel_id;
 
-  vdec_msg.channelId = GetIntChannelId(channel_value);
+  vdec_msg.channelId = GetIntChannelId(channel_id);
   vdec_msg.hiai_data = &yuv_image_frame_info;
 
   int strcpy_result = 0;
@@ -627,7 +648,7 @@ void VideoDecode::UnpackVideo2Image(const string &channel_value) {
           HIAI_ENGINE_LOG(HIAI_ENGINE_RUN_ARGS_NOT_RIGHT,
                           "Fail to call dvppctl process!");
 
-          free(vdec_msg.in_buffer);
+          delete[] vdec_msg.in_buffer;
           av_packet_unref(&av_packet);
           av_bsf_free(&bsf_ctx);
           avformat_close_input(&av_format_context);
@@ -635,10 +656,10 @@ void VideoDecode::UnpackVideo2Image(const string &channel_value) {
           return;
         }
 
-        free(vdec_msg.in_buffer);
+        delete[] vdec_msg.in_buffer;
 
         // send image data to next engine
-        SendImageDate(GetStrChannelId(channel_value));
+        SendImageDate(channel_id);
       }
     }
 
@@ -652,10 +673,10 @@ void VideoDecode::UnpackVideo2Image(const string &channel_value) {
   avformat_close_input(&av_format_context);  // close input video
   DestroyVdecApi(dvpp_api, 0);
 
-  HIAI_ENGINE_LOG("Ffmpeg read frame over!");
+    HIAI_ENGINE_LOG("Ffmpeg read frame over!");
 
   // send last yuv image data after call vdec
-  SendImageDate(GetStrChannelId(channel_value));
+  SendImageDate(channel_id);
 }
 
 bool VideoDecode::VerifyVideoWithUnpack(const string &channel_value) {
@@ -669,11 +690,13 @@ bool VideoDecode::VerifyVideoWithUnpack(const string &channel_value) {
   int ret_open_input_video = avformat_open_input(&av_format_context,
                                                  channel_value.c_str(), nullptr,
                                                  &avdic);
-  if (ret_open_input_video < kHandleSuccessful) {
-    HIAI_ENGINE_LOG(HIAI_ENGINE_RUN_ARGS_NOT_RIGHT,
-                    "Could not open input file:%s, "
-                    "result of avformat_open_input:%d",
-                    channel_value.c_str(), ret_open_input_video);
+  if (ret_open_input_video < kHandleSuccessful) { // check open video result
+    char buf_error[kErrorBufferSize];
+	av_strerror(ret_open_input_video, buf_error, kErrorBufferSize);
+	
+	HIAI_ENGINE_LOG(HIAI_ENGINE_RUN_ARGS_NOT_RIGHT, "Could not open video:%s, "
+                    "result of avformat_open_input:%d, error info:%s",
+                    channel_value.c_str(), ret_open_input_video, buf_error);
 
     if (avdic != nullptr) { // free AVDictionary
       av_dict_free(&avdic);
@@ -692,11 +715,16 @@ bool VideoDecode::VerifyVideoWithUnpack(const string &channel_value) {
         HIAI_ENGINE_RUN_ARGS_NOT_RIGHT,
         "Video index is -1, current media stream has no video info:%s",
         channel_value.c_str());
+		
+    avformat_close_input(&av_format_context);
     return false;
   }
 
   VideoType video_type = kInvalidTpye;
-  return CheckVideoType(video_index, av_format_context, video_type);
+  bool is_valid = CheckVideoType(video_index, av_format_context, video_type);
+  avformat_close_input(&av_format_context);
+  
+  return is_valid;
 }
 
 bool VideoDecode::VerifyVideoType() {
@@ -715,15 +743,17 @@ void VideoDecode::MultithreadHandleVideo() {
   // create two thread unpacke channel1 and channel2 video in same time
   if (!IsEmpty(channel1_, kStrChannelId1)
       && !IsEmpty(channel2_, kStrChannelId2)) {
-    thread thread_channel_1(&VideoDecode::UnpackVideo2Image, this, channel1_);
-    thread thread_channel_2(&VideoDecode::UnpackVideo2Image, this, channel2_);
+    thread thread_channel_1(&VideoDecode::UnpackVideo2Image, this,
+	                        kStrChannelId1);
+    thread thread_channel_2(&VideoDecode::UnpackVideo2Image, this,
+	                        kStrChannelId2);
 
     thread_channel_1.join();
     thread_channel_2.join();
   } else if (!IsEmpty(channel1_, kStrChannelId1)) { // unpacke channel1 video
-    UnpackVideo2Image(channel1_);
+    UnpackVideo2Image(kStrChannelId1);
   } else {  // unpacke channel2 video
-    UnpackVideo2Image(channel2_);
+    UnpackVideo2Image(kStrChannelId2);
   }
 }
 
@@ -763,8 +793,7 @@ bool VideoDecode::IsEmpty(const string &input_str, const string &channel_id) {
 
   // check input string is empty or spaces
   if (regex_match(input_str, regex_space)) {
-    HIAI_ENGINE_LOG(HIAI_ENGINE_RUN_ARGS_NOT_RIGHT,
-                    "The channel string is empty or all spaces, channel id:%s",
+    HIAI_ENGINE_LOG("The channel string is empty or all spaces, channel id:%s",
                     channel_id.c_str());
     return true;
   }

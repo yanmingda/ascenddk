@@ -149,9 +149,9 @@ HIAI_DEFINE_PROCESS(INPUT_SIZE, OUTPUT_SIZE)
 
   /**
    * @brief unpack video to image
-   * @param [in] channel_value: the input channel value
+   * @param [in] channel_id: the input channel id
    */
-  void UnpackVideo2Image(const std::string &channel_value);
+  void UnpackVideo2Image(const std::string &channel_id);
 
   /**
    * @brief verify the  video type of channel1 and channle2
@@ -242,17 +242,17 @@ HIAI_DEFINE_PROCESS(INPUT_SIZE, OUTPUT_SIZE)
 
   /**
    * @brief get channel id(integer value)
-   * @param [in] channel_value: the input channel value
+   * @param [in] channel_id: the input channel id
    * @return channel id(integer value)
    */
-  int GetIntChannelId(const std::string channel_value);
+  int GetIntChannelId(const std::string channel_id);
 
   /**
-   * @brief get channel id(string value)
-   * @param [in] channel_value: the input channel value
-   * @return channel id(string value)
+   * @brief get channel value
+   * @param [in] channel_id: the input channel id
+   * @return channel value
    */
-  const std::string &GetStrChannelId(const std::string &channel_value);
+  const std::string &GetChannelValue(const std::string &channel_id);
 
   /**
    * @brief ffmpeg post process after get all frame from video
