@@ -357,7 +357,7 @@ def main():
 			
         if altasdk_ssh_user != "root":
             altasdk_root_pwd = getpass.getpass(
-                "Please input Altas DK Development Board root user password:")
+                "[INFO] Please input Altas DK Development Board root user password:")
 
         print("[INFO] Transmit ffmpeg package is beginning.")
         
