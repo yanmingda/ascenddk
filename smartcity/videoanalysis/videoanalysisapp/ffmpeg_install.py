@@ -190,7 +190,7 @@ def add_engine_setting(settings_link, settings_include):
             ddk_engine_config_path, 'w', encoding='utf-8')
         json.dump(ddk_engine_config_info, ddk_engine_config_new_file, indent=2)
     except OSError as reason:
-        print("[ERROR] read egine setting file failed")
+        print("[ERROR] Read engine setting file failed")
         exit(-1)
     finally:
         if ddk_engine_config_file in locals():
@@ -214,7 +214,7 @@ def main():
         if user_want_ffmpeg == "yes" or  user_want_ffmpeg == "no" or user_want_ffmpeg == "":
             break
         else:
-            print("[ERROR] the input string:\"%s\" is invalid, please input \"yes\" or \"no\"!" % user_want_ffmpeg)
+            print("[ERROR] The input string:\"%s\" is invalid, please input \"yes\" or \"no\"!" % user_want_ffmpeg)
     
     if user_want_ffmpeg == "yes" or user_want_ffmpeg == "":
         # get FFmpeg source code path from user input
@@ -275,7 +275,7 @@ def main():
         execute("mkdir -p {path}/include/third_party/ffmpeg".format(path=ddk_home))
         execute("chmod -R 710 {path}/include/*".format(path=install_path))
         execute("cp -rdp {path1}/include/* {path2}/include/third_party/ffmpeg".format(path1=install_path,path2=ddk_home))
-        # execute("chmod -R 777 {path}/lib/*".format(path=install_path))
+        execute("chmod -R 644 {path}/lib/*".format(path=install_path))
         execute("cp -rdp {path1}/lib/* {path2}/device/lib".format(path1=install_path,path2=ddk_home))
 
         # adding engine setting in ddk configuration
@@ -298,7 +298,7 @@ def main():
         if atlas_want_ffmpeg == "yes" or  atlas_want_ffmpeg == "no" or atlas_want_ffmpeg == "":
             break
         else:
-            print("[ERROR] the input string:\"%s\" is invalid, please input \"yes\" or \"no\"!" % atlas_want_ffmpeg)
+            print("[ERROR] The input string:\"%s\" is invalid, please input \"yes\" or \"no\"!" % atlas_want_ffmpeg)
     
     if atlas_want_ffmpeg == "yes" or atlas_want_ffmpeg == "":    
         if code_path == "":
@@ -344,9 +344,9 @@ def main():
                 print("[ERROR] The user input IP: %s is invalid!" % altasdk_ip)
 
         altasdk_ssh_user = input(
-            "[INFO] Please input Atlas DK Development Board SSH user(default: hisilicon):")
+            "[INFO] Please input Atlas DK Development Board SSH user(default: HwHiAiUser):")
         if altasdk_ssh_user == "":
-            altasdk_ssh_user = "hisilicon"
+            altasdk_ssh_user = "HwHiAiUser"
 
         altasdk_ssh_pwd = getpass.getpass(
             "[INFO] Please input Atlas DK Development Board SSH user password:")
@@ -354,6 +354,10 @@ def main():
         altasdk_ssh_port = input("[INFO] Please input Atlas DK Development Board SSH port(default: 22):")
         if altasdk_ssh_port == "":
             altasdk_ssh_port = "22"
+			
+        if altasdk_ssh_user != "root":
+            altasdk_root_pwd = getpass.getpass(
+                "Please input Altas DK Development Board root user password:")
 
         print("[INFO] Transmit ffmpeg package is beginning.")
         
@@ -379,63 +383,51 @@ def main():
             exit(-1)
             
         # decompress ffmpeg package on Atlas
-        if altasdk_ssh_user == "root":
-            cmd_list = [{"type": "cmd",
-                     "value": "chmod -R 644 ./{scp_lib}/ffmpeg_lib.tar.gz".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "cd ./{scp_lib} && tar -zxvf ffmpeg_lib.tar.gz && cd ..".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "sudo cp -rdp  ./{scp_lib}/* /usr/lib64".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "rm -rf ./{scp_lib}".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "sudo ldconfig",
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT}]
-        else:
-            cmd_list = [{"type": "cmd",
-                     "value": "chmod -R 644 ./{scp_lib}/ffmpeg_lib.tar.gz".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "cd ./{scp_lib} && tar -zxvf ffmpeg_lib.tar.gz && cd ..".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "sudo cp -rdp  ./{scp_lib}/* /usr/lib64".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": "password"},
-                    {"type": "cmd",
-                     "value": altasdk_ssh_pwd,
-                     "secure": True},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "rm -f ./{scp_lib}".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "sudo ldconfig",
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT}]                     
+        cmd_list = []
+        if altasdk_ssh_user != "root":
+            cmd_list.extend([{"type":"cmd",
+                              "value":"su root",
+                              "secure":False},
+                             {"type":"cmd",
+                              "value":altasdk_root_pwd,
+                              "secure":True},
+                             {"type":"expect",
+                              "value":PROMPT}])
+        cmd_list.extend([{"type": "cmd",
+                         "value": "chmod -R 644 ./{scp_lib}/ffmpeg_lib.tar.gz".format(scp_lib=now_time),
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT},
+                        {"type": "cmd",
+                         "value": "cd ./{scp_lib} && tar -zxvf ffmpeg_lib.tar.gz && cd ..".format(scp_lib=now_time),
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT},
+                        {"type": "cmd",
+                         "value": "chown -R root:root ./{scp_lib}/*".format(scp_lib=now_time),
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT},
+                        {"type": "cmd",
+                         "value": "cp -rdp  ./{scp_lib}/* /usr/lib64".format(scp_lib=now_time),
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT},
+                        {"type": "cmd",
+                         "value": "rm -rf ./{scp_lib}".format(scp_lib=now_time),
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT},
+                        {"type": "cmd",
+                         "value": "rm -f /usr/lib64/ffmpeg_lib.tar.gz",
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT},
+                        {"type": "cmd",
+                         "value": "ldconfig",
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT}])
         ret = ssh_to_remote(altasdk_ssh_user, altasdk_ip, altasdk_ssh_port,
                       altasdk_ssh_pwd, cmd_list)
         if not ret:
