@@ -232,7 +232,6 @@ bool FaceRecognition::checkTransfromMat(const Mat &mat) {
     return true;
   }
   HIAI_ENGINE_LOG(
-      HIAI_ENGINE_RUN_ARGS_NOT_RIGHT,
       "transformation matrix not match, real type=%d, rows=%d, cols=%d",
       mat.type(), mat.rows, mat.cols);
   return false;
