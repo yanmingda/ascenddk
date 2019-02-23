@@ -102,7 +102,7 @@ class WebApp:
         '''get video state'''
         tmpvideostate = self.videostate
         tmplist = self.facial_recognize_manage.get_app_list()
-        if tmpvideostate["ret"] == 1 and tmpvideostate["msg"]["state"] in tmplist:
+        if tmpvideostate["ret"] == 1 and tmpvideostate["msg"]["name"] in tmplist:
             return self.videostate
         else:
             tmpvideostate["ret"] = 0
