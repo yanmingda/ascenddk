@@ -206,9 +206,9 @@ def main():
             print("Input IP: %s is invalid!" % altasdk_ip)
 
     altasdk_ssh_user = input(
-        "Please input Altas DK Development Board SSH user(default: hisilicon):")
+        "Please input Altas DK Development Board SSH user(default: HwHiAiUser):")
     if altasdk_ssh_user == "":
-        altasdk_ssh_user = "hisilicon"
+        altasdk_ssh_user = "HwHiAiUser"
 
     altasdk_ssh_pwd = getpass.getpass(
         "Please input Altas DK Development Board SSH user password:")
@@ -216,6 +216,10 @@ def main():
     altasdk_ssh_port = input("Please input Altas DK Development Board SSH port(default: 22):")
     if altasdk_ssh_port == "":
         altasdk_ssh_port = "22"
+
+    if altasdk_ssh_user != "root":
+        altasdk_root_pwd = getpass.getpass(
+            "Please input Altas DK Development Board root user password:")
 
     print("Common installation is beggining.")
 
@@ -255,53 +259,41 @@ def main():
         if not ret:
             print("Scp so to %s is failed, please check your env and input." % altasdk_ip)
             exit(-1)
-    if altasdk_ssh_user == "root":
-        cmd_list = [{"type": "cmd",
-                     "value": "chmod -R 644 ./{scp_lib}/*".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "sudo cp -rdp ./{scp_lib}/* /usr/lib64".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "rm -rf ./{scp_lib}".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "sudo ldconfig",
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT}]
-    else:
-        cmd_list = [{"type": "cmd",
-                     "value": "chmod -R 644 ./{scp_lib}/*".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "sudo cp -rdp ./{scp_lib}/* /usr/lib64".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": "password"},
-                    {"type": "cmd",
-                     "value": altasdk_ssh_pwd,
-                     "secure": True},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "rm -rf ./{scp_lib}".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "sudo ldconfig",
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT}]
+    cmd_list = []
+    if altasdk_ssh_user != "root":
+        cmd_list.extend([{"type": "cmd",
+                         "value": "su root",
+                         "secure": False},
+                         {"type": "cmd",
+                         "value": altasdk_root_pwd,
+                         "secure": True},
+                         {"type": "expect",
+                          "value": PROMPT}])
+    cmd_list.extend([{"type": "cmd",
+                      "value": "chmod -R 644 ./{scp_lib}/*".format(scp_lib=now_time),
+                      "secure": False},
+                     {"type": "expect",
+                      "value": PROMPT},
+                      {"type": "cmd",
+                      "value": "chown -R root:root ./{scp_lib}/*".format(scp_lib=now_time),
+                      "secure": False},
+                     {"type": "expect",
+                      "value": PROMPT},
+                     {"type": "cmd",
+                      "value": "cp -rdp ./{scp_lib}/* /usr/lib64".format(scp_lib=now_time),
+                      "secure": False},
+                     {"type": "expect",
+                      "value": PROMPT},
+                     {"type": "cmd",
+                      "value": "rm -rf ./{scp_lib}".format(scp_lib=now_time),
+                      "secure": False},
+                     {"type": "expect",
+                      "value": PROMPT},
+                     {"type": "cmd",
+                      "value": "ldconfig",
+                      "secure": False},
+                     {"type": "expect",
+                      "value": PROMPT}])
     ret = ssh_to_remote(altasdk_ssh_user, altasdk_ip, altasdk_ssh_port,
                   altasdk_ssh_pwd, cmd_list)
     if not ret:

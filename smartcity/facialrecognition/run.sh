@@ -29,4 +29,4 @@ echo "[INFO]: Begin to build project $dir/$allApps!"
 cd $dir/$allApps && sh ./build.sh
 cd $dir
 
-exec ~/tools/lib/run.sh -h $1 -n facialrecognitionapp -j $dir/facialrecognitionapp -k $ddkPath -w workspace_hiai_studio -M HIAI -T RUN
+exec ~/tools/lib/run.sh -h $1 -n facialrecognitionapp -j $dir/facialrecognitionapp -k $ddkPath -w workspace_hiai_studio -M HIAI -T RUN -e ~/tools/lib
