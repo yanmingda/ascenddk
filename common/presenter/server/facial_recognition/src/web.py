@@ -88,12 +88,26 @@ class WebApp:
 
         self.lock = threading.Lock()
 
+        self.videostate = {"ret":0,"msg":{"name":"","req":0}}
+
 
     def __new__(cls, *args, **kwargs):
         # if instance is None than create one
         if cls.__instance is None:
             cls.__instance = object.__new__(cls, *args, **kwargs)
         return cls.__instance
+
+
+    def get_videostate(self):
+        '''get video state'''
+        tmpvideostate = self.videostate
+        tmplist = self.facial_recognize_manage.get_app_list()
+        if tmpvideostate["ret"] == 1 and tmpvideostate["msg"]["name"] in tmplist:
+            return self.videostate
+        else:
+            tmpvideostate["ret"] = 0
+            self.videostate = tmpvideostate
+            return tmpvideostate
 
 
     def list_registered_apps(self):
@@ -284,6 +298,7 @@ class WebApp:
         """
         with self.lock:
             self.request_list.add(request)
+            self.videostate = {"ret":1,"msg":{"name":request[1],"req":request[0]}}
 
     def has_request(self, request):
         """
@@ -320,7 +335,7 @@ class ApplistHandler(BaseHandler):
         handle home or index request only for get
         """
         # self.render("applist.html", listret=G_WEBAPP.list_registered_apps())
-        self.render("home.html", listret=(G_WEBAPP.list_registered_apps(), G_WEBAPP.list_allface()))
+        self.render("home.html", listret=(G_WEBAPP.list_registered_apps(), G_WEBAPP.list_allface(), G_WEBAPP.get_videostate()))
 
 # pylint: disable=abstract-method
 class RegisterHandler(BaseHandler):
