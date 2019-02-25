@@ -27,6 +27,7 @@ sed -i "s:_face_recognition_model_:$spherefaceModel:g" ./facialrecognitionapp/gr
 
 echo "[INFO]: Begin to build project $dir/$allApps!"
 cd $dir/$allApps && sh ./build.sh
+libpath=$(echo `cd $ddkPath/../../../lib/; pwd`)
 cd $dir
 
-exec ~/tools/lib/run.sh -h $1 -n facialrecognitionapp -j $dir/facialrecognitionapp -k $ddkPath -w workspace_hiai_studio -M HIAI -T RUN -e ~/tools/lib
+exec $libpath/run.sh -h $1 -n facialrecognitionapp -j $dir/facialrecognitionapp -k $ddkPath -M HIAI -T RUN -e $libpath
