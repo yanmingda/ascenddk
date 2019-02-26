@@ -2,7 +2,7 @@ LOCAL_DIR      := $(patsubst %,%,$(CURDIR))
 
 # set DDK_HOME default value
 ifndef DDK_HOME
-DDK_HOME := /root/tools/che/ddk/ddk
+$(error "Can not find DDK_HOME env, please set it in environment!.")
 endif
 
 CC := aarch64-linux-gnu-g++
