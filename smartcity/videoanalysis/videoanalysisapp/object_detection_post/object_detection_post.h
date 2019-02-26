@@ -119,6 +119,15 @@ class ObjectDetectionPostProcess : public hiai::Engine {
    */
   HIAI_StatusT SendResults(uint32_t port_id, std::string data_type,
                            const std::shared_ptr<void>& data_ptr);
+
+   /**
+   * @brief : send image results to post port.
+   * @param [in] image_para: output data shared ptr.
+   * @return HIAI_StatusT
+   */
+  HIAI_StatusT SendDetectImage(
+    const std::shared_ptr<VideoDetectionImageParaT> &image_para);
+
   /**
    * @brief : send object image to next engine.
    * @param [in] port_id: output port id.

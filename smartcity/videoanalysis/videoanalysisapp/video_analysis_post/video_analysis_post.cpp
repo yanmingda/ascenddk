@@ -50,6 +50,20 @@ using namespace std;
 using namespace ascend::presenter;
 using namespace ascend::presenter::video_analysis;
 
+// register data type
+HIAI_REGISTER_DATA_TYPE("VideoImageInfoT", VideoImageInfoT);
+HIAI_REGISTER_DATA_TYPE("VideoImageParaT", VideoImageParaT);
+HIAI_REGISTER_DATA_TYPE("ObjectInfoT", ObjectInfoT);
+HIAI_REGISTER_DATA_TYPE("ObjectImageParaT", ObjectImageParaT);
+HIAI_REGISTER_DATA_TYPE("VideoDetectionImageParaT", VideoDetectionImageParaT);
+HIAI_REGISTER_DATA_TYPE("BatchCroppedImageParaT", BatchCroppedImageParaT);
+HIAI_REGISTER_DATA_TYPE("CarInfoT", CarInfoT);
+HIAI_REGISTER_DATA_TYPE("BatchCarInfoT", BatchCarInfoT);
+HIAI_REGISTER_DATA_TYPE("OutputT", OutputT);
+HIAI_REGISTER_DATA_TYPE("DetectionEngineTransT", DetectionEngineTransT);
+HIAI_REGISTER_DATA_TYPE("PedestrianInfoT", PedestrianInfoT);
+HIAI_REGISTER_DATA_TYPE("BatchPedestrianInfoT", BatchPedestrianInfoT);
+
 VideoAnalysisPost::~VideoAnalysisPost() {
   if (agent_channel_ != nullptr) {
     delete agent_channel_;
@@ -207,33 +221,10 @@ OperationCode VideoAnalysisPost::SendDetectionImage(
       to_string(image_para->image.video_image_info.frame_id));
   image_set.set_allocated_frame_index(frame_image);
 
-  ascend::utils::DvppToJpgPara dvpp_to_jpg_para;
-  dvpp_to_jpg_para.format = JPGENC_FORMAT_NV12;
-
-  // use dvpp convert yuv to jpg image, level should set fixed value 100
-  dvpp_to_jpg_para.level = 100;
-  dvpp_to_jpg_para.resolution.height = image_para->image.img.height;
-  dvpp_to_jpg_para.resolution.width = image_para->image.img.width;
-
-  // true indicate the image is aligned
-  dvpp_to_jpg_para.is_align_image = true;
-  ascend::utils::DvppProcess dvpp_jpg_process(dvpp_to_jpg_para);
-  ascend::utils::DvppOutput dvpp_output = { 0 };
-
-  // use dvpp convert yuv image to jpg image
-  int ret_dvpp;
-  ret_dvpp = dvpp_jpg_process.DvppOperationProc(
-      (char*) (image_para->image.img.data.get()), image_para->image.img.size,
-      &dvpp_output);
-  if (ret_dvpp == kDvppOperationOk) {
-    // set up origin image buff in ImageSet Message
-    image_set.set_frame_image(
-        string(reinterpret_cast<char*>(dvpp_output.buffer), dvpp_output.size));
-    delete[] dvpp_output.buffer;
-  } else {
-    HIAI_ENGINE_LOG(HIAI_ENGINE_RUN_ARGS_NOT_RIGHT,
-                    "fail to convert yuv to jpg,ret_dvpp = %d", ret_dvpp);
-  }
+  // set up origin image buff in ImageSet Message
+  image_set.set_frame_image(
+      string(reinterpret_cast<char*>(image_para->image.img.data.get()),
+             image_para->image.img.size));
 
   // get small images after reasoning
   for (vector<ObjectImageParaT>::iterator iter = image_para->obj_imgs.begin();
@@ -243,31 +234,9 @@ OperationCode VideoAnalysisPost::SendDetectionImage(
     object_img->set_id(iter->object_info.object_id);
     object_img->set_confidence(iter->object_info.score);
 
-    // use dvpp convert yuv image to jpg image
-    ascend::utils::DvppToJpgPara dvpp_to_jpg_obj_para;
-    dvpp_to_jpg_obj_para.format = JPGENC_FORMAT_NV12;
-
-    // level should set fixed value 100
-    dvpp_to_jpg_obj_para.level = 100;
-
-    // true indicate the image is aligned
-    dvpp_to_jpg_obj_para.is_align_image = true;
-    dvpp_to_jpg_obj_para.resolution.height = iter->img.height;
-    dvpp_to_jpg_obj_para.resolution.width = iter->img.width;
-    ascend::utils::DvppProcess dvpp_jpg_objprocess(dvpp_to_jpg_obj_para);
-    ascend::utils::DvppOutput obj_dvpp_output = { 0 };
-    ret_dvpp = dvpp_jpg_objprocess.DvppOperationProc(
-        (char*) (iter->img.data.get()), iter->img.size, &obj_dvpp_output);
-    if (ret_dvpp == kDvppOperationOk) {
-      // set up small image buff in ImageSet Message
-      object_img->set_image(
-          string(reinterpret_cast<char*>(obj_dvpp_output.buffer),
-                 obj_dvpp_output.size));
-      delete[] obj_dvpp_output.buffer;
-    } else {
-      HIAI_ENGINE_LOG(HIAI_ENGINE_RUN_ARGS_NOT_RIGHT,
-                      "fail to convert obj yuv to jpg,ret_dvpp = %d", ret_dvpp);
-    }
+    // set up small image buff in ImageSet Message
+    object_img->set_image(
+        string(reinterpret_cast<char*>(iter->img.data.get()), iter->img.size));
   }
 
   // construct callback Messages
