@@ -13,7 +13,7 @@ endif
 ifeq ($(mode), AtlasDK)
 CC := aarch64-linux-gnu-g++
 else ifeq ($(mode), ASIC)
-CC := $(DDK_HOME)/toolchains/aarch64-linux-gcc6.3/bin/aarch64-linux-gnu-g++
+CC := $(DDK_HOME)/uihost/toolchains/aarch64-linux-gcc6.3/bin/aarch64-linux-gnu-g++
 else
 $(error "Unsupported mode: "$(mode)", please input: AtlasDK or ASIC.")
 endif

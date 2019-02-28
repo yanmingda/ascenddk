@@ -192,7 +192,7 @@ def ssh_to_remote(user, ip, port, password, cmd_list):
     return True
 
 
-def add_engine_setting(settings):
+def add_engine_setting(mode, host_engine_settings, device_engine_settings):
     '''add common so configuration to ddk engine default setting file'''
     ddk_engine_config_path = os.path.join(
         os.getenv("DDK_HOME"), "conf/settings_engine.conf")
@@ -201,12 +201,23 @@ def add_engine_setting(settings):
             ddk_engine_config_path, 'r', encoding='utf-8')
         ddk_engine_config_info = json.load(
             ddk_engine_config_file, object_pairs_hook=OrderedDict)
-        oi_engine_link_obj = ddk_engine_config_info.get(
-            "configuration").get("OI").get("Device").get("linkflags").get("linkobj")
+        
+        if mode == MODE_ASIC:
+            engine_info = ddk_engine_config_info.get(
+            "configuration").get("FPGA")
+        else:
+            engine_info = ddk_engine_config_info.get(
+            "configuration").get("OI")
+        
+        host_engine_link_obj = engine_info.get("Host").get("linkflags").get("linkobj")
+        device_engine_link_obj = engine_info.get("Device").get("linkflags").get("linkobj")
 
-        for each_new_setting in settings:
-            if each_new_setting not in oi_engine_link_obj:
-                oi_engine_link_obj.insert(-1, each_new_setting)
+        for each_new_setting in host_engine_settings:
+            if each_new_setting not in host_engine_link_obj:
+                host_engine_link_obj.insert(-1, each_new_setting)
+        for each_new_setting in device_engine_settings:
+            if each_new_setting not in device_engine_link_obj:
+                device_engine_link_obj.insert(-1, each_new_setting)
         ddk_engine_config_new_file = open(
             ddk_engine_config_path, 'w', encoding='utf-8')
         json.dump(ddk_engine_config_info, ddk_engine_config_new_file, indent=2)
@@ -265,8 +276,8 @@ def main():
     
     print("Common installation is beggining.")
 
-    engine_settings = []
-
+    host_engine_settings = []
+    device_engine_settings = []
     now_time = datetime.datetime.now().strftime('scp_lib_%Y%m%d%H%M%S')
 
     mkdir_expect = PROMPT
@@ -283,7 +294,7 @@ def main():
 
     for each_so_file_dict in HOST_INSTALLED_SO_FILE:
         makefile_path = each_so_file_dict.get("makefile_path")
-        engine_settings.append(each_so_file_dict.get("engine_setting"))
+        host_engine_settings.append(each_so_file_dict.get("engine_setting"))
         so_file = each_so_file_dict.get("so_file")
 
         execute("make clean -C {path}".format(path=makefile_path))
@@ -295,7 +306,7 @@ def main():
 
     for each_so_file_dict in DEVICE_INSTALLED_SO_FILE:
         makefile_path = each_so_file_dict.get("makefile_path")
-        engine_settings.append(each_so_file_dict.get("engine_setting"))
+        device_engine_settings.append(each_so_file_dict.get("engine_setting"))
         so_file = each_so_file_dict.get("so_file")
 
         execute("make clean -C {path}".format(path=makefile_path))
@@ -349,7 +360,7 @@ def main():
         exit(-1)
 
     print("Adding engine setting in DDK configuration.")
-    add_engine_setting(engine_settings)
+    add_engine_setting(mode, host_engine_settings, device_engine_settings)
 
     print("Common installation is finished.")
 
