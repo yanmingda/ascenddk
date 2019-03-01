@@ -36,7 +36,6 @@ local_shared_libs := \
 	runtime \
 	devmm \
 	teec \
-	npu_drv \
 	pthread \
 	cce \
 	cce_aicpudev \

@@ -46,7 +46,7 @@ import datetime
 #ssh expect prompt
 PROMPT = ['# ', '>>> ', '> ', '\$ ']
 
-FFMPEG_CONFIGURE_OPTIONS = " --extra-libs=-lgcc  --cc=/usr/bin/aarch64-linux-gnu-gcc --ar=/usr/bin/aarch64-linux-gnu-ar --enable-cross-compile --target-os=linux --arch=aarch64 --enable-shared --enable-network --enable-protocol=tcp --enable-protocol=udp --enable-protocol=rtp --enable-demuxer=rtsp --disable-debug --disable-stripping --disable-doc --disable-ffplay --disable-ffprobe --disable-htmlpages --disable-manpages --disable-podpages  --disable-txtpages --disable-w32threads --disable-os2threads"
+FFMPEG_CONFIGURE_OPTIONS = " --cross-prefix={cross_prefix} --enable-cross-compile --target-os=linux --arch=aarch64 --enable-shared --enable-network --enable-protocol=tcp --enable-protocol=udp --enable-protocol=rtp --enable-demuxer=rtsp --disable-debug --disable-stripping --disable-doc --disable-ffplay --disable-ffprobe --disable-htmlpages --disable-manpages --disable-podpages  --disable-txtpages --disable-w32threads --disable-os2threads {sysroot} "
 
 FFMPEG_CONFIGURE_PREFIX = " --prefix="
 
@@ -56,6 +56,9 @@ FFMPEG_ENGINE_SETTING_INCLUDE = ["-I$(DDK_HOME)/include/third_party/ffmpeg \\"]
 
 CURRENT_PATH = os.path.dirname(
     os.path.realpath(__file__))
+
+MODE_ASIC = "ASIC"
+MODE_ATLAS_DK = "Atlas DK"
 
 def execute(cmd, timeout=3600, cwd=None):
     '''execute os command'''
@@ -105,6 +108,28 @@ def execute(cmd, timeout=3600, cwd=None):
 
     return True, std_output_lines_last
 
+def read_ddk_info(ddk_info_path):
+    try:
+        ddk_info_file = open(
+            ddk_info_path, 'r', encoding='utf-8')
+        ddk_info_dict = json.load(
+            ddk_info_file, object_pairs_hook=OrderedDict)
+        
+        if "TARGET" in ddk_info_dict:
+            mode = ddk_info_dict.get("TARGET")
+        else:
+            mode = MODE_ATLAS_DK
+            
+        
+        return True, mode
+    except OSError as reason:
+        print("read ddk_info file failed")
+        exit(-1)
+    finally:
+        if ddk_info_file in locals():
+            ddk_info_file.close()
+
+    return False, ""
 
 def scp_file_to_remote(user, ip, port, password, local_file, remote_file):
     '''do scp file to remote node'''
@@ -115,11 +140,11 @@ def scp_file_to_remote(user, ip, port, password, local_file, remote_file):
         process = pexpect.spawn(cmd)
 
         ret = process.expect(
-            ["password", "Are you sure you want to continue connecting"])
+            ["[Pp]assword", "Are you sure you want to continue connecting"])
         if ret == 1:
             process.sendline("yes")
             print(process.before)
-            ret = process.expect("password")
+            ret = process.expect("[Pp]assword")
         if ret != 0:
             return False
 
@@ -141,10 +166,10 @@ def ssh_to_remote(user, ip, port, password, cmd_list):
     try:
         process = pexpect.spawn(cmd)
         ret = process.expect(
-            ["password", "Are you sure you want to continue connecting"])
+            ["[Pp]assword", "Are you sure you want to continue connecting"])
         if ret == 1:
             process.sendline("yes")
-            ret = process.expect("password")
+            ret = process.expect("[Pp]assword")
         if ret != 0:
             return False
 
@@ -165,7 +190,7 @@ def ssh_to_remote(user, ip, port, password, cmd_list):
     return True
 
 
-def add_engine_setting(settings_link, settings_include):
+def add_engine_setting(mode, settings_link, settings_include):
     '''add common so configuration to ddk engine default setting file'''
     ddk_engine_config_path = os.path.join(
         os.getenv("DDK_HOME"), "conf/settings_engine.conf")
@@ -174,23 +199,28 @@ def add_engine_setting(settings_link, settings_include):
             ddk_engine_config_path, 'r', encoding='utf-8')
         ddk_engine_config_info = json.load(
             ddk_engine_config_file, object_pairs_hook=OrderedDict)
-        oi_engine_link_obj = ddk_engine_config_info.get(
-            "configuration").get("OI").get("Device").get("linkflags").get("linkobj")
-        oi_engine_include = ddk_engine_config_info.get(
-            "configuration").get("OI").get("Device").get("includes").get("include")
+        if mode == MODE_ASIC:
+            engine_info = ddk_engine_config_info.get(
+            "configuration").get("FPGA")
+        else:
+            engine_info = ddk_engine_config_info.get(
+            "configuration").get("OI")
+            
+        engine_link_obj = engine_info.get("Device").get("linkflags").get("linkobj")
+        engine_include = engine_info.get("Device").get("includes").get("include")
 
         for each_new_setting in settings_link:
-            if each_new_setting not in oi_engine_link_obj:
-                oi_engine_link_obj.insert(-1, each_new_setting)
+            if each_new_setting not in engine_link_obj:
+                engine_link_obj.insert(-1, each_new_setting)
         for each_new_include in settings_include:
-            if each_new_include not in oi_engine_include:
-                oi_engine_include.insert(-1, each_new_include)       
+            if each_new_include not in engine_include:
+                engine_include.insert(-1, each_new_include)       
                 
         ddk_engine_config_new_file = open(
             ddk_engine_config_path, 'w', encoding='utf-8')
         json.dump(ddk_engine_config_info, ddk_engine_config_new_file, indent=2)
     except OSError as reason:
-        print("[ERROR] read egine setting file failed")
+        print("[ERROR] Read engine setting file failed")
         exit(-1)
     finally:
         if ddk_engine_config_file in locals():
@@ -201,6 +231,22 @@ def add_engine_setting(settings_link, settings_include):
 
 def main():
     '''main function: install common so files'''
+    
+    ddk_engine_config_path = os.path.join(
+        os.getenv("DDK_HOME"), "conf/settings_engine.conf")
+    if not os.path.exists(ddk_engine_config_path):
+        print("Can not find setings_engine.conf, please check DDK installation.")
+        exit(-1)
+    
+    ddk_info_path = os.path.join(
+        os.getenv("DDK_HOME"), "ddk_info")
+    if not os.path.exists(ddk_info_path):
+        print("Can not find ddk_info, please check DDK installation.")
+        exit(-1)
+    
+    ret, mode = read_ddk_info(ddk_info_path)
+    if not ret:
+        exit(-1)
    
     code_path = "";
     install_path = "";
@@ -214,7 +260,7 @@ def main():
         if user_want_ffmpeg == "yes" or  user_want_ffmpeg == "no" or user_want_ffmpeg == "":
             break
         else:
-            print("[ERROR] the input string:\"%s\" is invalid, please input \"yes\" or \"no\"!" % user_want_ffmpeg)
+            print("[ERROR] The input string:\"%s\" is invalid, please input \"yes\" or \"no\"!" % user_want_ffmpeg)
     
     if user_want_ffmpeg == "yes" or user_want_ffmpeg == "":
         # get FFmpeg source code path from user input
@@ -226,7 +272,7 @@ def main():
                 break
             else:
                 print("[ERROR] FFmpeg source code path:\"%s\" is invalid!" % code_path)
-	
+
         # check the input is exist
         if not os.path.exists(code_path):
             print("[ERROR] FFmpeg source code path:\"%s\" is not exist!" % code_path)
@@ -256,10 +302,22 @@ def main():
         
         # compile and install ffmpeg
         print("[INFO] FFmpeg installation is beginning, the process will takes several minutes, please wait a while.")
+        
+        if mode == MODE_ASIC:
+            cross_prefix = os.path.join(
+            os.getenv("DDK_HOME"), "uihost/toolchains/aarch64-linux-gcc6.3/bin/aarch64-linux-gnu-")
+            sysroot = "--sysroot=" + os.path.join(
+            os.getenv("DDK_HOME"), "uihost/toolchains/aarch64-linux-gcc6.3/sysroot")            
+        else:            
+            cross_prefix = "/usr/bin/aarch64-linux-gnu-"
+            sysroot = ""
+
+        ffmpeg_build_options = FFMPEG_CONFIGURE_OPTIONS.format(cross_prefix=cross_prefix, sysroot=sysroot)
+        
         install_path = "{path}/install_path".format(path=code_path)        
         execute("mkdir -p {path}".format(path=install_path))
         execute("make clean -C {path}".format(path=code_path))
-        execute("cd {path1} && bash {path1}/configure {options}{prefix}{path2}".format(path1=code_path,options=FFMPEG_CONFIGURE_OPTIONS,prefix=FFMPEG_CONFIGURE_PREFIX,path2=install_path))
+        execute("cd {path1} && bash {path1}/configure {options}{prefix}{path2}".format(path1=code_path,options=ffmpeg_build_options,prefix=FFMPEG_CONFIGURE_PREFIX,path2=install_path))
         execute("make -j 8 -C {path}".format(path=code_path))
         execute("make install -C {path}".format(path=code_path))
     
@@ -275,7 +333,7 @@ def main():
         execute("mkdir -p {path}/include/third_party/ffmpeg".format(path=ddk_home))
         execute("chmod -R 710 {path}/include/*".format(path=install_path))
         execute("cp -rdp {path1}/include/* {path2}/include/third_party/ffmpeg".format(path1=install_path,path2=ddk_home))
-        # execute("chmod -R 777 {path}/lib/*".format(path=install_path))
+        execute("chmod -R 644 {path}/lib/*".format(path=install_path))
         execute("cp -rdp {path1}/lib/* {path2}/device/lib".format(path1=install_path,path2=ddk_home))
 
         # adding engine setting in ddk configuration
@@ -286,19 +344,19 @@ def main():
         engine_settings_include = []
         for each_engine_include in FFMPEG_ENGINE_SETTING_INCLUDE:
             engine_settings_include.append(each_engine_include)
-        add_engine_setting(engine_settings_link, engine_settings_include)    
+        add_engine_setting(mode, engine_settings_link, engine_settings_include)    
             
         print("[INFO] FFmpeg installation is finished.")
         
     # check user want to install ffmpeg on Atlas
     while(True):
-        atlas_want_ffmpeg = input("[INFO] Do you want to install FFmpeg on Atlas DK Development Board?(yes/no, default:yes):")
+        atlas_want_ffmpeg = input("[INFO] Do you want to install FFmpeg on %s Device?(yes/no, default:yes):" % mode)
 
         # verify input path format
         if atlas_want_ffmpeg == "yes" or  atlas_want_ffmpeg == "no" or atlas_want_ffmpeg == "":
             break
         else:
-            print("[ERROR] the input string:\"%s\" is invalid, please input \"yes\" or \"no\"!" % atlas_want_ffmpeg)
+            print("[ERROR] The input string:\"%s\" is invalid, please input \"yes\" or \"no\"!" % atlas_want_ffmpeg)
     
     if atlas_want_ffmpeg == "yes" or atlas_want_ffmpeg == "":    
         if code_path == "":
@@ -336,24 +394,27 @@ def main():
     
         # transmit ffmpeg packet to Atlas
         while(True):
-            altasdk_ip = input("[INFO] Please input Atlas DK Development Board IP:")
+            developer_ip = input("[INFO] Please input %s Device IP:" % mode)
 
-            if re.match(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$", altasdk_ip):
+            if re.match(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$", developer_ip):
                 break
             else:
-                print("[ERROR] The user input IP: %s is invalid!" % altasdk_ip)
+                print("[ERROR] The user input IP: %s is invalid!" % developer_ip)
+        developer_ssh_user = input(
+            "[INFO] Please input %s Device SSH user(default: HwHiAiUser):" % mode)
+        if developer_ssh_user == "":
+            developer_ssh_user = "HwHiAiUser"
 
-        altasdk_ssh_user = input(
-            "[INFO] Please input Atlas DK Development Board SSH user(default: hisilicon):")
-        if altasdk_ssh_user == "":
-            altasdk_ssh_user = "hisilicon"
+        developer_ssh_pwd = getpass.getpass(
+            "[INFO] Please input %s Device SSH user password:" % mode)
 
-        altasdk_ssh_pwd = getpass.getpass(
-            "[INFO] Please input Atlas DK Development Board SSH user password:")
+        developer_ssh_port = input("[INFO] Please input %s Device SSH port(default: 22):" % mode)
+        if developer_ssh_port == "":
+            developer_ssh_port = "22"
 
-        altasdk_ssh_port = input("[INFO] Please input Atlas DK Development Board SSH port(default: 22):")
-        if altasdk_ssh_port == "":
-            altasdk_ssh_port = "22"
+        if developer_ssh_user != "root":
+            developer_root_pwd = getpass.getpass(
+                "[INFO] Please input %s Device root user password:" % mode)
 
         print("[INFO] Transmit ffmpeg package is beginning.")
         
@@ -361,83 +422,71 @@ def main():
         now_time = datetime.datetime.now().strftime('scp_lib_%Y%m%d%H%M%S')
         mkdir_expect = PROMPT
         mkdir_expect.append("File exists")
-        ret = ssh_to_remote(altasdk_ssh_user, altasdk_ip, altasdk_ssh_port,
-                      altasdk_ssh_pwd, [{"type": "cmd",
+        ret = ssh_to_remote(developer_ssh_user, developer_ip, developer_ssh_port,
+                      developer_ssh_pwd, [{"type": "cmd",
                                          "value": "mkdir ./{scp_lib}".format(scp_lib=now_time),
                                          "secure": False},
                                         {"type": "expect",
                                          "value": mkdir_expect}])
         if not ret:
-            print("[ERROR] Mkdir dir in %s failed, please check your env and input." % altasdk_ip)
+            print("[ERROR] Mkdir dir in %s failed, please check your env and input." % developer_ip)
             exit(-1)        
         
         # transmit FFmpeg package to Atlas
-        ret = scp_file_to_remote(altasdk_ssh_user, altasdk_ip, altasdk_ssh_port,
-                               altasdk_ssh_pwd, ffmpeg_pakage, "./{scp_lib}".format(scp_lib=now_time))
+        ret = scp_file_to_remote(developer_ssh_user, developer_ip, developer_ssh_port,
+                               developer_ssh_pwd, ffmpeg_pakage, "./{scp_lib}".format(scp_lib=now_time))
         if not ret:
-            print("[ERROR] Scp ffmpeg package to %s is failed, please check your env and input." % altasdk_ip)
+            print("[ERROR] Scp ffmpeg package to %s is failed, please check your env and input." % developer_ip)
             exit(-1)
             
         # decompress ffmpeg package on Atlas
-        if altasdk_ssh_user == "root":
-            cmd_list = [{"type": "cmd",
-                     "value": "chmod -R 644 ./{scp_lib}/ffmpeg_lib.tar.gz".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "cd ./{scp_lib} && tar -zxvf ffmpeg_lib.tar.gz && cd ..".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "sudo cp -rdp  ./{scp_lib}/* /usr/lib64".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "rm -rf ./{scp_lib}".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "sudo ldconfig",
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT}]
-        else:
-            cmd_list = [{"type": "cmd",
-                     "value": "chmod -R 644 ./{scp_lib}/ffmpeg_lib.tar.gz".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "cd ./{scp_lib} && tar -zxvf ffmpeg_lib.tar.gz && cd ..".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "sudo cp -rdp  ./{scp_lib}/* /usr/lib64".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": "password"},
-                    {"type": "cmd",
-                     "value": altasdk_ssh_pwd,
-                     "secure": True},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "rm -f ./{scp_lib}".format(scp_lib=now_time),
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT},
-                    {"type": "cmd",
-                     "value": "sudo ldconfig",
-                     "secure": False},
-                    {"type": "expect",
-                     "value": PROMPT}]                     
-        ret = ssh_to_remote(altasdk_ssh_user, altasdk_ip, altasdk_ssh_port,
-                      altasdk_ssh_pwd, cmd_list)
+        cmd_list = []
+        if developer_ssh_user != "root":
+            cmd_list.extend([{"type":"cmd",
+                              "value":"su root",
+                              "secure":False},
+                             {"type":"cmd",
+                              "value":developer_root_pwd,
+                              "secure":True},
+                             {"type":"expect",
+                              "value":PROMPT}])
+        cmd_list.extend([{"type": "cmd",
+                         "value": "chmod -R 644 ./{scp_lib}/ffmpeg_lib.tar.gz".format(scp_lib=now_time),
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT},
+                        {"type": "cmd",
+                         "value": "cd ./{scp_lib} && tar -zxvf ffmpeg_lib.tar.gz && cd ..".format(scp_lib=now_time),
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT},
+                        {"type": "cmd",
+                         "value": "chown -R root:root ./{scp_lib}/*".format(scp_lib=now_time),
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT},
+                        {"type": "cmd",
+                         "value": "cp -rdp  ./{scp_lib}/* /usr/lib64".format(scp_lib=now_time),
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT},
+                        {"type": "cmd",
+                         "value": "rm -rf ./{scp_lib}".format(scp_lib=now_time),
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT},
+                        {"type": "cmd",
+                         "value": "rm -f /usr/lib64/ffmpeg_lib.tar.gz",
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT},
+                        {"type": "cmd",
+                         "value": "ldconfig",
+                         "secure": False},
+                        {"type": "expect",
+                         "value": PROMPT}])
+        ret = ssh_to_remote(developer_ssh_user, developer_ip, developer_ssh_port,
+                      developer_ssh_pwd, cmd_list)
         if not ret:
             print("[ERROR] Installation ffmpeg on Atlas is failed.")
             exit(-1)

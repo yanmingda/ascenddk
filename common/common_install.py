@@ -50,16 +50,19 @@ CURRENT_PATH = os.path.dirname(
     os.path.realpath(__file__))
 
 #installed so files
-INSTALLED_SO_FILE = [{"makefile_path": os.path.join(CURRENT_PATH, "presenter/agent"),
-                       "engine_setting": "-lpresenteragent \\",
-                       "so_file" : os.path.join(CURRENT_PATH, "presenter/agent/out/libpresenteragent.so")},
-                      {"makefile_path": os.path.join(CURRENT_PATH, "utils/ascend_ezdvpp"),
+DEVICE_INSTALLED_SO_FILE = [{"makefile_path": os.path.join(CURRENT_PATH, "utils/ascend_ezdvpp"),
                        "engine_setting": "-lascend_ezdvpp \\",
                        "so_file" : os.path.join(CURRENT_PATH, "utils/ascend_ezdvpp/out/libascend_ezdvpp.so")},
                       {"makefile_path": os.path.join(CURRENT_PATH, "osd"),
                        "engine_setting": "-lascenddk_osd \\",
                        "so_file" : os.path.join(CURRENT_PATH, "osd/out/libascenddk_osd.so")}]
 
+HOST_INSTALLED_SO_FILE = [{"makefile_path": os.path.join(CURRENT_PATH, "presenter/agent"),
+                       "engine_setting": "-lpresenteragent \\",
+                       "so_file" : os.path.join(CURRENT_PATH, "presenter/agent/out/libpresenteragent.so")}]
+
+MODE_ASIC = "ASIC"
+MODE_ATLAS_DK = "Atlas DK"
 
 def execute(cmd, timeout=3600, cwd=None):
     '''execute os command'''
@@ -107,6 +110,28 @@ def execute(cmd, timeout=3600, cwd=None):
 
     return True, std_output_lines_last
 
+def read_ddk_info(ddk_info_path):
+    try:
+        ddk_info_file = open(
+            ddk_info_path, 'r', encoding='utf-8')
+        ddk_info_dict = json.load(
+            ddk_info_file, object_pairs_hook=OrderedDict)
+        
+        if "TARGET" in ddk_info_dict:
+            mode = ddk_info_dict.get("TARGET")
+        else:
+            mode = MODE_ATLAS_DK
+            
+        
+        return True, mode
+    except OSError as reason:
+        print("read ddk_info file failed")
+        exit(-1)
+    finally:
+        if ddk_info_file in locals():
+            ddk_info_file.close()
+
+    return False, ""
 
 def scp_file_to_remote(user, ip, port, password, local_file, remote_file):
     '''do scp file to remote node'''
@@ -117,11 +142,11 @@ def scp_file_to_remote(user, ip, port, password, local_file, remote_file):
         process = pexpect.spawn(cmd)
 
         ret = process.expect(
-            ["password", "Are you sure you want to continue connecting"])
+            ["[Pp]assword", "Are you sure you want to continue connecting"])
         if ret == 1:
             process.sendline("yes")
             print(process.before)
-            ret = process.expect("password")
+            ret = process.expect("[Pp]assword")
         if ret != 0:
             return False
 
@@ -143,10 +168,10 @@ def ssh_to_remote(user, ip, port, password, cmd_list):
     try:
         process = pexpect.spawn(cmd)
         ret = process.expect(
-            ["password", "Are you sure you want to continue connecting"])
+            ["[Pp]assword", "Are you sure you want to continue connecting"])
         if ret == 1:
             process.sendline("yes")
-            ret = process.expect("password")
+            ret = process.expect("[Pp]assword")
         if ret != 0:
             return False
 
@@ -167,7 +192,7 @@ def ssh_to_remote(user, ip, port, password, cmd_list):
     return True
 
 
-def add_engine_setting(settings):
+def add_engine_setting(mode, host_engine_settings, device_engine_settings):
     '''add common so configuration to ddk engine default setting file'''
     ddk_engine_config_path = os.path.join(
         os.getenv("DDK_HOME"), "conf/settings_engine.conf")
@@ -176,12 +201,23 @@ def add_engine_setting(settings):
             ddk_engine_config_path, 'r', encoding='utf-8')
         ddk_engine_config_info = json.load(
             ddk_engine_config_file, object_pairs_hook=OrderedDict)
-        oi_engine_link_obj = ddk_engine_config_info.get(
-            "configuration").get("OI").get("Device").get("linkflags").get("linkobj")
+        
+        if mode == MODE_ASIC:
+            engine_info = ddk_engine_config_info.get(
+            "configuration").get("FPGA")
+        else:
+            engine_info = ddk_engine_config_info.get(
+            "configuration").get("OI")
+        
+        host_engine_link_obj = engine_info.get("Host").get("linkflags").get("linkobj")
+        device_engine_link_obj = engine_info.get("Device").get("linkflags").get("linkobj")
 
-        for each_new_setting in settings:
-            if each_new_setting not in oi_engine_link_obj:
-                oi_engine_link_obj.insert(-1, each_new_setting)
+        for each_new_setting in host_engine_settings:
+            if each_new_setting not in host_engine_link_obj:
+                host_engine_link_obj.insert(-1, each_new_setting)
+        for each_new_setting in device_engine_settings:
+            if each_new_setting not in device_engine_link_obj:
+                device_engine_link_obj.insert(-1, each_new_setting)
         ddk_engine_config_new_file = open(
             ddk_engine_config_path, 'w', encoding='utf-8')
         json.dump(ddk_engine_config_info, ddk_engine_config_new_file, indent=2)
@@ -197,75 +233,98 @@ def add_engine_setting(settings):
 
 def main():
     '''main function: install common so files'''
-    while(True):
-        altasdk_ip = input("Please input Altas DK Development Board IP:")
-
-        if re.match(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$", altasdk_ip):
-            break
-        else:
-            print("Input IP: %s is invalid!" % altasdk_ip)
-
-    altasdk_ssh_user = input(
-        "Please input Altas DK Development Board SSH user(default: HwHiAiUser):")
-    if altasdk_ssh_user == "":
-        altasdk_ssh_user = "HwHiAiUser"
-
-    altasdk_ssh_pwd = getpass.getpass(
-        "Please input Altas DK Development Board SSH user password:")
-
-    altasdk_ssh_port = input("Please input Altas DK Development Board SSH port(default: 22):")
-    if altasdk_ssh_port == "":
-        altasdk_ssh_port = "22"
-
-    if altasdk_ssh_user != "root":
-        altasdk_root_pwd = getpass.getpass(
-            "Please input Altas DK Development Board root user password:")
-
-    print("Common installation is beggining.")
-
     ddk_engine_config_path = os.path.join(
         os.getenv("DDK_HOME"), "conf/settings_engine.conf")
     if not os.path.exists(ddk_engine_config_path):
         print("Can not find setings_engine.conf, please check DDK installation.")
         exit(-1)
+    
+    ddk_info_path = os.path.join(
+        os.getenv("DDK_HOME"), "ddk_info")
+    if not os.path.exists(ddk_info_path):
+        print("Can not find ddk_info, please check DDK installation.")
+        exit(-1)
+    
+    ret, mode = read_ddk_info(ddk_info_path)
+    if not ret:
+        exit(-1)
 
-    engine_settings = []
+    while(True):
+        developer_ip = input("Please input %s Device IP:" % mode)
 
+        if re.match(r"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$", developer_ip):
+            break
+        else:
+            print("Input IP: %s is invalid!" % developer_ip)
+
+    developer_ssh_user = input(
+        "Please input %s Device SSH user(default: HwHiAiUser):" % mode)
+    if developer_ssh_user == "":
+        developer_ssh_user = "HwHiAiUser"
+
+    developer_ssh_pwd = getpass.getpass(
+        "Please input %s Device SSH user password:" % mode)
+
+    developer_ssh_port = input("Please input %s Device SSH port(default: 22):" % mode)
+    if developer_ssh_port == "":
+        developer_ssh_port = "22"
+
+    if developer_ssh_user != "root":
+        developer_root_pwd = getpass.getpass(
+            "Please input %s Device root user password:" % mode)
+    
+    
+    print("Common installation is beggining.")
+
+    host_engine_settings = []
+    device_engine_settings = []
     now_time = datetime.datetime.now().strftime('scp_lib_%Y%m%d%H%M%S')
 
     mkdir_expect = PROMPT
     mkdir_expect.append("File exists")
-    ret = ssh_to_remote(altasdk_ssh_user, altasdk_ip, altasdk_ssh_port,
-                  altasdk_ssh_pwd, [{"type": "cmd",
+    ret = ssh_to_remote(developer_ssh_user, developer_ip, developer_ssh_port,
+                  developer_ssh_pwd, [{"type": "cmd",
                                      "value": "mkdir ./{scp_lib}".format(scp_lib=now_time),
                                      "secure": False},
                                     {"type": "expect",
                                      "value": mkdir_expect}])
     if not ret:
-        print("Mkdir dir in %s failed, please check your env and input." % altasdk_ip)
+        print("Mkdir dir in %s failed, please check your env and input." % developer_ip)
         exit(-1)
 
-    for each_so_file_dict in INSTALLED_SO_FILE:
+    for each_so_file_dict in HOST_INSTALLED_SO_FILE:
         makefile_path = each_so_file_dict.get("makefile_path")
-        engine_settings.append(each_so_file_dict.get("engine_setting"))
+        host_engine_settings.append(each_so_file_dict.get("engine_setting"))
         so_file = each_so_file_dict.get("so_file")
 
         execute("make clean -C {path}".format(path=makefile_path))
 
-        execute("make install -C {path}".format(path=makefile_path))
+        execute("make install mode={mode} -C {path}".format(mode=mode.replace(" ", ""), path=makefile_path))
+        if mode == MODE_ATLAS_DK:
+            ret = scp_file_to_remote(developer_ssh_user, developer_ip, developer_ssh_port,
+                               developer_ssh_pwd, so_file, "./{scp_lib}".format(scp_lib=now_time))
 
-        ret = scp_file_to_remote(altasdk_ssh_user, altasdk_ip, altasdk_ssh_port,
-                           altasdk_ssh_pwd, so_file, "./{scp_lib}".format(scp_lib=now_time))
+    for each_so_file_dict in DEVICE_INSTALLED_SO_FILE:
+        makefile_path = each_so_file_dict.get("makefile_path")
+        device_engine_settings.append(each_so_file_dict.get("engine_setting"))
+        so_file = each_so_file_dict.get("so_file")
+
+        execute("make clean -C {path}".format(path=makefile_path))
+
+        execute("make install mode={mode} -C {path}".format(mode=mode.replace(" ", ""), path=makefile_path))
+
+        ret = scp_file_to_remote(developer_ssh_user, developer_ip, developer_ssh_port,
+                           developer_ssh_pwd, so_file, "./{scp_lib}".format(scp_lib=now_time))
         if not ret:
-            print("Scp so to %s is failed, please check your env and input." % altasdk_ip)
+            print("Scp so to %s is failed, please check your env and input." % developer_ip)
             exit(-1)
     cmd_list = []
-    if altasdk_ssh_user != "root":
+    if developer_ssh_user != "root":
         cmd_list.extend([{"type": "cmd",
                          "value": "su root",
                          "secure": False},
                          {"type": "cmd",
-                         "value": altasdk_root_pwd,
+                         "value": developer_root_pwd,
                          "secure": True},
                          {"type": "expect",
                           "value": PROMPT}])
@@ -294,14 +353,14 @@ def main():
                       "secure": False},
                      {"type": "expect",
                       "value": PROMPT}])
-    ret = ssh_to_remote(altasdk_ssh_user, altasdk_ip, altasdk_ssh_port,
-                  altasdk_ssh_pwd, cmd_list)
+    ret = ssh_to_remote(developer_ssh_user, developer_ip, developer_ssh_port,
+                  developer_ssh_pwd, cmd_list)
     if not ret:
         print("Installation is failed.")
         exit(-1)
 
     print("Adding engine setting in DDK configuration.")
-    add_engine_setting(engine_settings)
+    add_engine_setting(mode, host_engine_settings, device_engine_settings)
 
     print("Common installation is finished.")
 

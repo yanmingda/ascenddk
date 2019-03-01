@@ -86,11 +86,12 @@ const string kPedestrianAttr[kPedestrianAttrNumber] = { "Age16-30", "Age31-45",
     "Shorts", "Short Sleeve", "Skirt", "Sneaker", "Stripes", "Sunglasses",
     "Trousers", "Tshirt", "UpperOther", "V-Neck" };
 
-const int kWaitTime = 10000; // wait 10 ms when send data to next engine
+const int kWaitTime = 10000; // wait 10 ms when send data to Cnext engine
 }
 
 HIAI_REGISTER_DATA_TYPE("PedestrianInfoT", PedestrianInfoT);
 HIAI_REGISTER_DATA_TYPE("BatchPedestrianInfoT", BatchPedestrianInfoT);
+HIAI_REGISTER_DATA_TYPE("VideoImageInfoT", VideoImageInfoT);
 HIAI_REGISTER_DATA_TYPE("BatchCroppedImageParaT", BatchCroppedImageParaT);
 
 HIAI_StatusT PedestrianAttrInference::Init(

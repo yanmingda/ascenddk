@@ -73,6 +73,9 @@ const string kPrefixCar = "car_";
 const string kPrefixBus = "bus_";
 const string kPrefixPerson = "person_";
 
+// function of dvpp returns success
+const int kDvppOperationOk = 0;
+
 // infernece output data index
 enum BBoxDataIndex {
   kAttribute = 1,
@@ -257,8 +260,7 @@ HIAI_StatusT ObjectDetectionPostProcess::HandleResults(
 
   if (!inference_result->status ||
       inference_result->output_datas.size() < kInferenceVectorSize) {
-    SendResults(kPortPost, "VideoDetectionImageParaT",
-                static_pointer_cast<void>(detection_image));
+    SendDetectImage(detection_image);
     return HIAI_ERROR;
   }
 
@@ -271,8 +273,7 @@ HIAI_StatusT ObjectDetectionPostProcess::HandleResults(
     // error
     HIAI_ENGINE_LOG(HIAI_ENGINE_RUN_ARGS_NOT_RIGHT,
                     "[ODPostProcess] image inference out");
-    SendResults(kPortPost, "VideoDetectionImageParaT",
-                static_pointer_cast<void>(detection_image));
+    SendDetectImage(detection_image);
     return HIAI_ERROR;
   }
 
@@ -290,9 +291,7 @@ HIAI_StatusT ObjectDetectionPostProcess::HandleResults(
                     car_type_imgs, car_color_imgs, person_imgs);
 
   // send_data
-  HIAI_StatusT send_ret =
-      SendResults(kPortPost, "VideoDetectionImageParaT",
-                  static_pointer_cast<void>(detection_image));
+  HIAI_StatusT send_ret = SendDetectImage(detection_image);
   if (send_ret != HIAI_OK) {
     HIAI_ENGINE_LOG(HIAI_ENGINE_RUN_ARGS_NOT_RIGHT,
                     "[ODPostProcess] send image error channel: %d, frame: %d!",
@@ -357,6 +356,68 @@ HIAI_StatusT ObjectDetectionPostProcess::SendResults(
     return HIAI_ERROR;
   }
   return HIAI_OK;
+}
+
+HIAI_StatusT ObjectDetectionPostProcess::SendDetectImage(
+    const shared_ptr<VideoDetectionImageParaT> &image_para) {
+  ascend::utils::DvppToJpgPara dvpp_to_jpg_para;
+  dvpp_to_jpg_para.format = JPGENC_FORMAT_NV12;
+
+  // use dvpp convert yuv to jpg image, level should set fixed value 100
+  dvpp_to_jpg_para.level = 100;
+  dvpp_to_jpg_para.resolution.height = image_para->image.img.height;
+  dvpp_to_jpg_para.resolution.width = image_para->image.img.width;
+
+  // true indicate the image is aligned
+  dvpp_to_jpg_para.is_align_image = true;
+  ascend::utils::DvppProcess dvpp_jpg_process(dvpp_to_jpg_para);
+  ascend::utils::DvppOutput dvpp_output = { 0 };
+
+  // use dvpp convert yuv image to jpg image
+  int ret_dvpp;
+  ret_dvpp = dvpp_jpg_process.DvppOperationProc(
+      (char*) (image_para->image.img.data.get()), image_para->image.img.size,
+      &dvpp_output);
+  if (ret_dvpp == kDvppOperationOk) {
+    image_para->image.img.data.reset(dvpp_output.buffer,
+                                     default_delete<uint8_t[]>());
+    image_para->image.img.size = dvpp_output.size;
+  } else {
+    HIAI_ENGINE_LOG(HIAI_ENGINE_RUN_ARGS_NOT_RIGHT,
+                    "fail to convert yuv to jpg,ret_dvpp = %d", ret_dvpp);
+    return HIAI_ERROR;
+  }
+
+  // get small images after reasoning
+  for (vector<ObjectImageParaT>::iterator iter = image_para->obj_imgs.begin();
+      iter != image_para->obj_imgs.end(); ++iter) {
+    // use dvpp convert yuv image to jpg image
+    ascend::utils::DvppToJpgPara dvpp_to_jpg_obj_para;
+    dvpp_to_jpg_obj_para.format = JPGENC_FORMAT_NV12;
+
+    // level should set fixed value 100
+    dvpp_to_jpg_obj_para.level = 100;
+
+    // true indicate the image is aligned
+    dvpp_to_jpg_obj_para.is_align_image = true;
+    dvpp_to_jpg_obj_para.resolution.height = iter->img.height;
+    dvpp_to_jpg_obj_para.resolution.width = iter->img.width;
+    ascend::utils::DvppProcess dvpp_jpg_objprocess(dvpp_to_jpg_obj_para);
+    ascend::utils::DvppOutput obj_dvpp_output = { 0 };
+    ret_dvpp = dvpp_jpg_objprocess.DvppOperationProc(
+        (char*) (iter->img.data.get()), iter->img.size, &obj_dvpp_output);
+    if (ret_dvpp == kDvppOperationOk) {
+      iter->img.data.reset(obj_dvpp_output.buffer, default_delete<uint8_t[]>());
+      iter->img.size = obj_dvpp_output.size;
+    } else {
+      HIAI_ENGINE_LOG(HIAI_ENGINE_RUN_ARGS_NOT_RIGHT,
+                      "fail to convert obj yuv to jpg,ret_dvpp = %d", ret_dvpp);
+      return HIAI_ERROR;
+    }
+  }
+
+  return SendResults(kPortPost, "VideoDetectionImageParaT",
+                     static_pointer_cast<void>(image_para));
 }
 
 float ObjectDetectionPostProcess::CorrectCoordinate(float value) {

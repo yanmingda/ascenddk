@@ -1,12 +1,22 @@
 TOPDIR      := $(patsubst %,%,$(CURDIR))
 
 ifndef DDK_HOME
-DDK_HOME := /root/tools/che/ddk/ddk
+$(error "Can not find DDK_HOME env, please set it in environment!.")
 endif
 
 LOCAL_MODULE_NAME := libascend_ezdvpp.so
 
+ifeq ($(mode),)
+mode=AtlasDK
+endif
+
+ifeq ($(mode), AtlasDK)
 CC := aarch64-linux-gnu-g++
+else ifeq ($(mode), ASIC)
+CC := $(DDK_HOME)/uihost/toolchains/aarch64-linux-gcc6.3/bin/aarch64-linux-gnu-g++
+else
+$(error "Unsupported mode: "$(mode)", please input: AtlasDK or ASIC.")
+endif
 
 LOCAL_DIR  := .
 OUT_DIR = out
@@ -29,7 +39,6 @@ LNK_FLAGS := \
 	-Wl,-rpath-link=$(DDK_HOME)/device/lib/ \
 	-L$(DDK_HOME)/device/lib/ \
 	-lhiai_common \
-	-lmedia_mini \
 	-lDvpp_api \
 	-shared
 
