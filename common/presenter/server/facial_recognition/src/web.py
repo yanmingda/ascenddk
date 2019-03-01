@@ -69,6 +69,7 @@ IMAGE = "image_data"
 # return code
 RET_CODE_SUCCESS = "0"
 RET_CODE_FAIL = "1"
+RET_CODE_LOADING = "2"
 
 
 class WebApp:
@@ -265,6 +266,8 @@ class WebApp:
 
         handler = self.channel_mgr.get_channel_handler_by_name(app_name)
 
+        ret["ret"] = RET_CODE_LOADING
+
         if handler is not None:
             frame_info = handler.get_frame()
         else:
@@ -273,14 +276,13 @@ class WebApp:
         if not frame_info:
             return ret
 
-        ret["ret"] = RET_CODE_SUCCESS
-
         try:
             ret["image"] = base64.b64encode(frame_info["image"]).decode("utf-8")
         except (TypeError, ValueError) as exp:
             logging.error(exp)
             return ret
 
+        ret["ret"] = RET_CODE_SUCCESS
         ret["fps"] = frame_info["fps"]
         ret["face_list"] = frame_info["face_list"]
 
