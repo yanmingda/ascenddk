@@ -166,6 +166,7 @@
     var retCodeSuccess="0"
     var retCodeFail="1"
     var ws,app_name,req
+    var canvas_width,canvas_height
 </script>
 <script>
     var canvas=document.getElementById("canvas")
@@ -173,6 +174,10 @@
     $('#fpswapper').hide()
     $('#loading').hide()
     function startViewVideo(app_name,req){
+        if(canvas_width != undefined && canvas_height != undefined){
+            ctx.clearRect(0,0,canvas_width,canvas_height)
+            console.log("canvas clear")
+        }
         $('#loading').show()
         $('#canvas').hide()
         $('#channel_name_val').text(app_name)
@@ -211,6 +216,8 @@
                 img.onload=function(){
                     canvas.setAttribute("width",img.width)
                     canvas.setAttribute("height",img.height)
+                    canvas_width = img.width
+                    canvas_height = img.height
                     ctx.strokeStyle="yellow"
                     ctx.font="40px serif"
                     ctx.fillStyle="yellow"
